@@ -8,8 +8,8 @@ This repository contains the implementation of:
 * UberNCE (supervised contrastive learning on videos)
 * CoCLR
 
-Links: comming soon.
-Code: comming soon. 
+### Paper link: comming soon.
+### Code: comming soon. 
 
 ### Result
 Finetune entire network for action classification on UCF101:
