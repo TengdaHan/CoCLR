@@ -8,7 +8,7 @@ This repository contains the implementation of:
 * UberNCE (supervised contrastive learning on videos)
 * CoCLR
 
-### Paper link: comming soon.
+### Link: [[Project Page]](http://www.robots.ox.ac.uk/~vgg/research/CoCLR/) [Paper (comming soon)].
 ### Code: comming soon. 
 
 ### Result
