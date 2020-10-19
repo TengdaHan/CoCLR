@@ -11,7 +11,7 @@ This repository contains the implementation of:
 ### Link: 
 
 [[Project Page]](http://www.robots.ox.ac.uk/~vgg/research/CoCLR/)
-[[Paper]](http://www.robots.ox.ac.uk/~vgg/publications/2020/Han20b/han20b.pdf)
+[[PDF]](http://www.robots.ox.ac.uk/~vgg/publications/2020/Han20b/han20b.pdf)
 [Arxiv: soon]
 
 ### Code: soon. 
