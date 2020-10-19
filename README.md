@@ -4,12 +4,17 @@
 
 This repository contains the implementation of:
 
-* InfoNCE (MoCo on videos)
-* UberNCE (supervised contrastive learning on videos)
-* CoCLR
+- [x] InfoNCE (MoCo on videos)
+- [x] UberNCE (supervised contrastive learning on videos)
+- [ ] CoCLR
 
-### Link: [[Project Page]](http://www.robots.ox.ac.uk/~vgg/research/CoCLR/) [Paper (comming soon)].
-### Code: comming soon. 
+### Link: 
+
+[[Project Page]](http://www.robots.ox.ac.uk/~vgg/research/CoCLR/)
+[[Paper](http://www.robots.ox.ac.uk/~vgg/publications/2020/Han20b/han20b.pdf)]
+[Arxiv: soon]
+
+### Code: soon. 
 
 ### Result
 Finetune entire network for action classification on UCF101:
