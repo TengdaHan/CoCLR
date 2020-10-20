@@ -12,7 +12,7 @@ This repository contains the implementation of:
 
 [[Project Page]](http://www.robots.ox.ac.uk/~vgg/research/CoCLR/)
 [[PDF]](http://www.robots.ox.ac.uk/~vgg/publications/2020/Han20b/han20b.pdf)
-[Arxiv: soon]
+[[Arxiv]](https://arxiv.org/abs/2010.09709)
 
 ### More code comming soon. 
 
