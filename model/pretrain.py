@@ -258,7 +258,7 @@ class UberNCE(InfoNCE):
         return logits, mask
 
 
-class CoCLR(nn.Module):
+class CoCLR(InfoNCE):
     '''
     CoCLR: using another view of the data to define positive and negative pair
     Still, use MoCo to enlarge the negative pool
@@ -270,38 +270,13 @@ class CoCLR(nn.Module):
         m: moco momentum of updating key encoder (default: 0.999)
         T: softmax temperature (default: 0.07)
         '''
-        super(CoCLR, self).__init__()
+        super(CoCLR, self).__init__(network, dim, K, m, T)
 
-        self.dim = dim
-        self.K = K
-        self.m = m
-        self.T = T
         self.topk = topk
 
-        # create the encoders
-        backbone, self.param = select_backbone(network, track_running_stats=True)
-        feature_size = self.param['feature_size']
-        self.encoder_q = nn.Sequential(
-                        backbone, 
-                        nn.AdaptiveAvgPool3d((1,1,1)),
-                        nn.Conv3d(feature_size, feature_size, kernel_size=1, bias=True),
-                        nn.ReLU(),
-                        nn.Conv3d(feature_size, dim, kernel_size=1, bias=True))
-        
-        backbone, _ = select_backbone(network, track_running_stats=True)
-        self.encoder_k = nn.Sequential(
-                        backbone, 
-                        nn.AdaptiveAvgPool3d((1,1,1)),
-                        nn.Conv3d(feature_size, feature_size, kernel_size=1, bias=True),
-                        nn.ReLU(),
-                        nn.Conv3d(feature_size, dim, kernel_size=1, bias=True))
-
-        for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
-            param_k.data.copy_(param_q.data)  # initialize
-            param_k.requires_grad = False  # not update by gradient
-
         # create another encoder, for the second view of the data 
-        backbone, _ = select_backbone(network, track_running_stats=True)
+        backbone, _ = select_backbone(network)
+        feature_size = self.param['feature_size']
         self.sampler = nn.Sequential(
                             backbone,
                             nn.AdaptiveAvgPool3d((1,1,1)),
@@ -311,34 +286,25 @@ class CoCLR(nn.Module):
         for param_s in self.sampler.parameters():
             param_s.requires_grad = False  # not update by gradient
 
-        # create the queue
-        self.register_buffer("queue", torch.randn(dim, K))
-        self.queue = nn.functional.normalize(self.queue, dim=0)
-
         # create another queue, for the second view of the data
         self.register_buffer("queue_second", torch.randn(dim, K))
         self.queue_second = nn.functional.normalize(self.queue_second, dim=0)
-
-        self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
+        
         # for handling sibling videos, e.g. for UCF101 dataset
         self.register_buffer("queue_vname", torch.ones(K, dtype=torch.long) * -1) 
+        # for monitoring purpose only
+        self.register_buffer("queue_label", torch.ones(K, dtype=torch.long) * -1)
         
         self.queue_is_full = False
         self.reverse = reverse 
 
     @torch.no_grad()
-    def _momentum_update_key_encoder(self):
-        '''Momentum update of the key encoder'''
-        for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
-            param_k.data = param_k.data * self.m + param_q.data * (1. - self.m)
-
-    @torch.no_grad()
-    def _dequeue_and_enqueue(self, keys, keys_second, vnames, labels):
+    def _dequeue_and_enqueue(self, keys, keys_second, vnames):
         # gather keys before updating queue
         keys = concat_all_gather(keys)
         keys_second = concat_all_gather(keys_second)
         vnames = concat_all_gather(vnames)
-        labels = concat_all_gather(labels)
+        # labels = concat_all_gather(labels)
 
         batch_size = keys.shape[0]
 
@@ -349,58 +315,11 @@ class CoCLR(nn.Module):
         self.queue[:, ptr:ptr + batch_size] = keys.T
         self.queue_second[:, ptr:ptr + batch_size] = keys_second.T
         self.queue_vname[ptr:ptr + batch_size] = vnames
-
+        self.queue_label[ptr:ptr + batch_size] = torch.ones_like(vnames)
         ptr = (ptr + batch_size) % self.K  # move pointer
 
         self.queue_ptr[0] = ptr
 
-
-    @torch.no_grad()
-    def _batch_shuffle_ddp(self, x):
-        """
-        Batch shuffle, for making use of BatchNorm.
-        *** Only support DistributedDataParallel (DDP) model. ***
-        """
-        # gather from all gpus
-        batch_size_this = x.shape[0]
-        x_gather = concat_all_gather(x)
-        batch_size_all = x_gather.shape[0]
-
-        num_gpus = batch_size_all // batch_size_this
-
-        # random shuffle index
-        idx_shuffle = torch.randperm(batch_size_all).cuda()
-
-        # broadcast to all gpus
-        torch.distributed.broadcast(idx_shuffle, src=0)
-
-        # index for restoring
-        idx_unshuffle = torch.argsort(idx_shuffle)
-
-        # shuffled index for this gpu
-        gpu_idx = torch.distributed.get_rank()
-        idx_this = idx_shuffle.view(num_gpus, -1)[gpu_idx]
-
-        return x_gather[idx_this], idx_unshuffle
-
-    @torch.no_grad()
-    def _batch_unshuffle_ddp(self, x, idx_unshuffle):
-        """
-        Undo batch shuffle.
-        *** Only support DistributedDataParallel (DDP) model. ***
-        """
-        # gather from all gpus
-        batch_size_this = x.shape[0]
-        x_gather = concat_all_gather(x)
-        batch_size_all = x_gather.shape[0]
-
-        num_gpus = batch_size_all // batch_size_this
-
-        # restored index for this gpu
-        gpu_idx = torch.distributed.get_rank()
-        idx_this = idx_unshuffle.view(num_gpus, -1)[gpu_idx]
-
-        return x_gather[idx_this]
 
     def forward(self, block1, block2, k_vsource):
         '''Output: logits, targets'''
@@ -441,7 +360,7 @@ class CoCLR(nn.Module):
             kf = nn.functional.normalize(kf, dim=1)
             kf = kf.view(B, self.dim)
 
-        # if queue_second is full: compute mask, else: train InfoNCE
+        # if queue_second is full: compute mask & train CoCLR, else: train InfoNCE
 
         # compute logits
         l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)
@@ -454,7 +373,7 @@ class CoCLR(nn.Module):
         logits /= self.T
 
         # mask: binary mask for positive keys
-        # handle sibling videos, e.g. for UCF101, has no effect on K400
+        # handle sibling videos, e.g. for UCF101. It has no effect on K400
         mask_source = k_vsource.unsqueeze(1) == self.queue_vname.unsqueeze(0) # B,K
         mask = mask_source.clone()
 
@@ -462,7 +381,7 @@ class CoCLR(nn.Module):
             self.queue_is_full = torch.all(self.queue_label != -1)
             
         if self.queue_is_full: 
-            print('\n===== Flow queue is full now =====')
+            print('\n===== queue is full now =====')
 
         if self.queue_is_full and (self.topk != 0):
             mask_sim = kf.matmul(self.queue_second.clone().detach())

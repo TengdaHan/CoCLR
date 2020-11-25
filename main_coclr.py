@@ -198,11 +198,8 @@ def main_worker(gpu, ngpus_per_node, args):
 
     ### optimizer ###
     params = []
-    if args.train_what == 'all':
-        for name, param in model.named_parameters():
-            params.append({'params': param})
-    else:
-        raise NotImplementedError('train_what invalid')
+    for name, param in model.named_parameters():
+        params.append({'params': param})
 
     print('\n===========Check Grad============')
     for name, param in model.named_parameters():
@@ -306,7 +303,7 @@ def main_worker(gpu, ngpus_per_node, args):
     torch.backends.cudnn.benchmark = True
 
     # tensorboard plot tools
-    writer_train = SummaryWriter(logdir=os.path.join(img_path, 'train'))
+    writer_train = SummaryWriter(logdir=os.path.join(args.img_path, 'train'))
     args.train_plotter = TB.PlotterThread(writer_train)
     
     ### main loop ###    
@@ -492,7 +489,7 @@ def set_path(args):
     if args.resume: exp_path = os.path.dirname(os.path.dirname(args.resume))
     elif args.test: exp_path = os.path.dirname(os.path.dirname(args.test))
     else:
-        exp_path = 'log-{args.prefix}/{args.model}-top{args.topk}{0}{args.name_prefix}_k{args.moco_k}_{args.dataset}-{args.img_dim}_{args.net}_\
+        exp_path = 'log-{args.prefix}/{args.model}-top{args.topk}{0}_k{args.moco_k}_{args.dataset}-{args.img_dim}_{args.net}_\
 bs{args.batch_size}_lr{args.lr}_seq{args.num_seq}_len{args.seq_len}_ds{args.ds}'.format(
                     '-R' if args.reverse else '', \
                     args=args)

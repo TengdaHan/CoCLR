@@ -39,7 +39,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--net', default='s3d', type=str) # r18-all
     parser.add_argument('--model', default='infonce', type=str)
-    parser.add_argument('--dataset', default='ucf101', type=str)
+    parser.add_argument('--dataset', default='ucf101-2clip', type=str)
     parser.add_argument('--seq_len', default=32, type=int, help='number of frames in each video block')
     parser.add_argument('--num_seq', default=2, type=int, help='number of video blocks')
     parser.add_argument('--ds', default=1, type=int, help='frame down sampling rate')
@@ -186,11 +186,8 @@ def main_worker(gpu, ngpus_per_node, args):
 
     ### optimizer ###
     params = []
-    if args.train_what == 'all':
-        for name, param in model.named_parameters():
-            params.append({'params': param})
-    else:
-        raise NotImplementedError
+    for name, param in model.named_parameters():
+        params.append({'params': param})
 
     print('\n===========Check Grad============')
     for name, param in model.named_parameters():
@@ -249,7 +246,7 @@ def main_worker(gpu, ngpus_per_node, args):
     torch.backends.cudnn.benchmark = True
 
     # tensorboard plot tools
-    writer_train = SummaryWriter(logdir=os.path.join(img_path, 'train'))
+    writer_train = SummaryWriter(logdir=os.path.join(args.img_path, 'train'))
     args.train_plotter = TB.PlotterThread(writer_train)
 
     ### main loop ###    
@@ -261,7 +258,7 @@ def main_worker(gpu, ngpus_per_node, args):
             train_loader.sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, epoch, args)
 
-        _, train_acc = train_one_epoch(train_loader, model, criterion, optimizer, lr_scheduler, transform_train_cuda, epoch, args)
+        _, train_acc = train_one_epoch(train_loader, model, criterion, optimizer, transform_train_cuda, epoch, args)
         
         if (epoch % args.save_freq == 0) or (epoch == args.epochs - 1): 
             # save check_point on rank==0 worker
@@ -284,7 +281,7 @@ def main_worker(gpu, ngpus_per_node, args):
     sys.exit(0)
 
 
-def train_one_epoch(data_loader, model, criterion, optimizer, lr_scheduler, transforms_cuda, epoch, args):
+def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, epoch, args):
     batch_time = AverageMeter('Time',':.2f')
     data_time = AverageMeter('Data',':.2f')
     losses = AverageMeter('Loss',':.4f')
@@ -304,7 +301,7 @@ def train_one_epoch(data_loader, model, criterion, optimizer, lr_scheduler, tran
 
     end = time.time()
 
-    for idx, input_seq in tqdm(enumerate(data_loader), total=len(data_loader)):
+    for idx, input_seq in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
         data_time.update(time.time() - end)
         B = input_seq.size(0)
         input_seq = tr(input_seq.cuda(non_blocking=True))
@@ -441,13 +438,13 @@ bs{args.batch_size}_lr{args.lr}_seq{args.num_seq}_len{args.seq_len}_ds{args.ds}{
 
 if __name__ == '__main__':
     '''
-    Three ways to run:
+    Three ways to run (recommend first one for simplicity):
     1. CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch\
-       --nproc_per_node=2 main_infonce.py (do not use multiprocessing-distributed) ...
+       --nproc_per_node=2 main_nce.py (do not use multiprocessing-distributed) ...
 
        This mode overwrites WORLD_SIZE, overwrites rank with local_rank
        
-    2. CUDA_VISIBLE_DEVICES=0,1 python main_infonce.py \
+    2. CUDA_VISIBLE_DEVICES=0,1 python main_nce.py \
        --dist-url 'tcp://localhost:10001' --multiprocessing-distributed --world-size 1 --rank 0 ...
 
        Official methods from fb/moco repo
