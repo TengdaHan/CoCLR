@@ -9,8 +9,8 @@
 *.pytorch
 *.pkl
 **/tmp
-process_data/data/
-*/process_data/data/
+#process_data/data/
+#*/process_data/data/
 *.tsv
 *.pbtxt
 *.svg
@@ -29,4 +29,5 @@ process_data/data/
 *.vscode*
 *.csv
 *.npy
+log-*
 !asset/*.png

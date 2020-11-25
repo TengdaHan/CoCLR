@@ -112,6 +112,12 @@ def neq_load_customized(model, pretrained_dict, verbose=True):
     return model
 
 
+def strfdelta(tdelta, fmt):
+    d = {"d": tdelta.days}
+    d["h"], rem = divmod(tdelta.seconds, 3600)
+    d["m"], d["s"] = divmod(rem, 60)
+    return fmt.format(**d)
+
 class Logger(object):
     '''write something to txt file'''
     def __init__(self, path):

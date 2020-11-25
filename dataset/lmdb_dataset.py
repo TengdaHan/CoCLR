@@ -197,7 +197,7 @@ class UCF101LMDB(UCF101LMDB_2CLIP):
 
 class HMDB51LMDB(UCF101LMDB):
     def __init__(self, root='%s/../process_data/data/hmdb51' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path=os.path.join(db_root, 'HMDB51/hmdb51_frame.lmdb'),
+                 db_path=os.path.join(lmdb_root, 'HMDB51/hmdb51_frame.lmdb'),
                  **kwargs):
         super(HMDB51LMDB, self).__init__(root=root, db_path=db_path, **kwargs)
 
@@ -361,7 +361,7 @@ class UCF101Flow_LMDB(UCF101Flow_LMDB_2CLIP):
 
 class HMDB51Flow_LMDB(UCF101Flow_LMDB):
     def __init__(self, root='%s/../process_data/data/hmdb51' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path=os.path.join(db_root, 'HMDB51/hmdb51_tvl1.lmdb'),
+                 db_path=os.path.join(lmdb_root, 'HMDB51/hmdb51_tvl1.lmdb'),
                  **kwargs):
         super(HMDB51Flow_LMDB, self).__init__(root=root, db_path=db_path, **kwargs)
 

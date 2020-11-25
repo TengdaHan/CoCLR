@@ -65,5 +65,5 @@ class LinearClassifier(nn.Module):
             if 'bias' in name:
                 nn.init.constant_(param, 0.0)
             elif 'weight' in name:
-                nn.init.normal_(param, 0.01)
+                nn.init.normal_(param, mean=0.0, std=0.01)
 

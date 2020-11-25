@@ -26,9 +26,8 @@ import torch.nn.functional as F
 
 from model.classifier import LinearClassifier
 from dataset.lmdb_dataset import *
-from utils.vis_utils import denorm
 from utils.utils import AverageMeter, save_checkpoint, \
-write_log, calc_topk_accuracy, batch_denorm, Logger, \
+write_log, calc_topk_accuracy, denorm, batch_denorm, Logger, \
 ProgressMeter, neq_load_customized
 import utils.augmentation as A
 import utils.transforms as T
@@ -175,7 +174,7 @@ def main(args):
             epoch = checkpoint['epoch']
             state_dict = checkpoint['state_dict']
 
-            if args.retrieval_ucf or args.retrieval_full: # if directly test on pretrained network
+            if args.retrieval: # if directly test on pretrained network
                 new_dict = {}
                 for k,v in state_dict.items():
                     k = k.replace('encoder_q.0.', 'backbone.')
@@ -267,8 +266,8 @@ def main(args):
     torch.backends.cudnn.benchmark = True
 
     # plot tools
-    writer_val = SummaryWriter(logdir=os.path.join(img_path, 'val'))
-    writer_train = SummaryWriter(logdir=os.path.join(img_path, 'train'))
+    writer_val = SummaryWriter(logdir=os.path.join(args.img_path, 'val'))
+    writer_train = SummaryWriter(logdir=os.path.join(args.img_path, 'train'))
     args.val_plotter = TB.PlotterThread(writer_val)
     args.train_plotter = TB.PlotterThread(writer_train)
 
@@ -338,7 +337,8 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, d
         input_seq = tr(input_seq.to(device, non_blocking=True))
         target = target.to(device, non_blocking=True)
         
-        logit, _ = model(input_seq)        
+        input_seq = input_seq.squeeze(1) # num_seq is always 1, seqeeze it
+        logit, _ = model(input_seq)
         loss = criterion(logit, target)
         top1, top5 = calc_topk_accuracy(logit, target, (1,5))
         
@@ -395,6 +395,7 @@ def validate(data_loader, model, criterion, transforms_cuda, device, epoch, args
             input_seq = tr(input_seq.to(device, non_blocking=True))
             target = target.to(device, non_blocking=True)
 
+            input_seq = input_seq.squeeze(1) # num_seq is always 1, seqeeze it
             logit, _ = model(input_seq)
             loss = criterion(logit, target)
             top1, top5 = calc_topk_accuracy(logit, target, (1,5))
@@ -469,7 +470,7 @@ def test_10crop(dataset, model, criterion, transforms_cuda, device, epoch, args)
                 dataset.transform = transform
                 dataset.return_path = True
                 dataset.return_label = True
-                test_sampler = data.Sequential(dataset)
+                test_sampler = data.SequentialSampler(dataset)
                 data_loader = data.DataLoader(dataset,
                                               batch_size=1,
                                               sampler=test_sampler,
@@ -479,6 +480,7 @@ def test_10crop(dataset, model, criterion, transforms_cuda, device, epoch, args)
 
                 for idx, (input_seq, _) in tqdm(enumerate(data_loader), total=len(data_loader)):
                     input_seq = tr(input_seq.to(device, non_blocking=True))
+                    input_seq = input_seq.squeeze(1) # num_seq is always 1, seqeeze it
                     logit, _ = model(input_seq)
 
                     # average probability along the temporal window
@@ -587,8 +589,8 @@ def test_retrieval(model, criterion, transforms_cuda, device, epoch, args):
                             return_path=True)
         print('test dataset size: %d' % len(test_dataset))
 
-        train_sampler = data.Sequential(train_dataset)
-        test_sampler = data.Sequential(test_dataset)
+        train_sampler = data.SequentialSampler(train_dataset)
+        test_sampler = data.SequentialSampler(test_dataset)
 
         train_loader = data.DataLoader(train_dataset,
                                       batch_size=1,
@@ -627,15 +629,12 @@ def test_retrieval(model, criterion, transforms_cuda, device, epoch, args):
                 current_target = current_target.to(device, non_blocking=True)
 
                 test_sample = input_seq.size(0)
-                if args.other is not None: input_seq = input_seq.squeeze(1)
+                input_seq = input_seq.squeeze(1)
                 logit, feature = model(input_seq)
                 if test_feature is None:
                     test_feature = torch.zeros(len(test_dataset), feature.size(-1), device=feature.device)
 
-                if args.other is not None: 
-                    test_feature[sample_id,:] = feature.mean(0)
-                else:
-                    test_feature[sample_id,:] = feature[:,-1,:].mean(0)
+                test_feature[sample_id,:] = feature.mean(0)
                 test_label.append(current_target)
                 test_vname.append(vname)
                 sample_id += 1
@@ -666,16 +665,13 @@ def test_retrieval(model, criterion, transforms_cuda, device, epoch, args):
                 current_target = current_target.to(device, non_blocking=True)
 
                 test_sample = input_seq.size(0)
-                if args.other is not None: input_seq = input_seq.squeeze(1)
+                input_seq = input_seq.squeeze(1)
                 logit, feature = model(input_seq)
                 if train_feature is None:
                     train_feature = torch.zeros(len(train_dataset), feature.size(-1), device=feature.device)
 
-                if args.other is not None: 
-                    train_feature[sample_id,:] = feature.mean(0)
-                else:
-                    train_feature[sample_id,:] = feature[:,-1,:].mean(0)
-                # train_feature.append(feature[:,-1,:].mean(0))
+                train_feature[sample_id,:] = feature.mean(0)
+                # train_feature[sample_id,:] = feature[:,-1,:].mean(0)
                 train_label.append(current_target)
                 train_vname.append(vname)
                 sample_id += 1
