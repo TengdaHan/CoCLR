@@ -279,7 +279,7 @@ class CoCLR(nn.Module):
         self.topk = topk
 
         # create the encoders
-        backbone, self.param = select_resnet(network, track_running_stats=True)
+        backbone, self.param = select_backbone(network, track_running_stats=True)
         feature_size = self.param['feature_size']
         self.encoder_q = nn.Sequential(
                         backbone, 
@@ -288,7 +288,7 @@ class CoCLR(nn.Module):
                         nn.ReLU(),
                         nn.Conv3d(feature_size, dim, kernel_size=1, bias=True))
         
-        backbone, _ = select_resnet(network, track_running_stats=True)
+        backbone, _ = select_backbone(network, track_running_stats=True)
         self.encoder_k = nn.Sequential(
                         backbone, 
                         nn.AdaptiveAvgPool3d((1,1,1)),
@@ -301,7 +301,7 @@ class CoCLR(nn.Module):
             param_k.requires_grad = False  # not update by gradient
 
         # create another encoder, for the second view of the data 
-        backbone, _ = select_resnet(network, track_running_stats=True)
+        backbone, _ = select_backbone(network, track_running_stats=True)
         self.sampler = nn.Sequential(
                             backbone,
                             nn.AdaptiveAvgPool3d((1,1,1)),
