@@ -301,17 +301,19 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
 
     end = time.time()
 
-    for idx, input_seq in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
+    for idx, (input_seq, label) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
         data_time.update(time.time() - end)
         B = input_seq.size(0)
         input_seq = tr(input_seq.cuda(non_blocking=True))
-        output, target = model(input_seq)
 
         if args.model == 'infonce': # 'target' is the index of self
+            output, target = model(input_seq)
             loss = criterion(output, target)
             top1, top5 = calc_topk_accuracy(output, target, (1,5))
         
         if args.model == 'ubernce': # 'target' is the binary mask
+            label = label.cuda(non_blocking=True)
+            output, target = model(input_seq, label)
             # optimize all positive pairs, compute the mean for num_pos and for batch_size 
             loss = - (F.log_softmax(output, dim=1) * target).sum(1) / target.sum(1)
             loss = loss.mean()
@@ -391,17 +393,17 @@ def get_data(transform, mode, args):
 
     if args.dataset == 'ucf101-2clip':
         dataset = UCF101LMDB_2CLIP(mode=mode, transform=transform, 
-            num_frames=args.seq_len, ds=args.ds, return_label=False)
+            num_frames=args.seq_len, ds=args.ds, return_label=True)
     elif args.dataset == 'ucf101-f-2clip':
         dataset = UCF101Flow_LMDB_2CLIP(mode=mode, transform=transform, 
-            num_frames=args.seq_len, ds=args.ds, return_label=False)
+            num_frames=args.seq_len, ds=args.ds, return_label=True)
 
     elif args.dataset == 'k400-2clip': 
         dataset = K400_LMDB_2CLIP(mode=mode, transform=transform, 
-            num_frames=args.seq_len, ds=args.ds, return_label=False)
+            num_frames=args.seq_len, ds=args.ds, return_label=True)
     elif args.dataset == 'k400-f-2clip': 
         dataset = K400_Flow_LMDB_2CLIP(mode=mode, transform=transform, 
-            num_frames=args.seq_len, ds=args.ds, return_label=False)
+            num_frames=args.seq_len, ds=args.ds, return_label=True)
 
     return dataset 
 

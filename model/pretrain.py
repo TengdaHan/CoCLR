@@ -207,6 +207,25 @@ class UberNCE(InfoNCE):
         self.register_buffer("queue_label", torch.ones(K, dtype=torch.long) * -1)
 
 
+    @torch.no_grad()
+    def _dequeue_and_enqueue(self, keys, labels):
+        # gather keys before updating queue
+        keys = concat_all_gather(keys)
+        labels = concat_all_gather(labels)
+
+        batch_size = keys.shape[0]
+
+        ptr = int(self.queue_ptr)
+        assert self.K % batch_size == 0  # for simplicity
+
+        # replace the keys at ptr (dequeue and enqueue)
+        self.queue[:, ptr:ptr + batch_size] = keys.T
+        self.queue_label[ptr:ptr + batch_size] = labels
+        ptr = (ptr + batch_size) % self.K  # move pointer
+
+        self.queue_ptr[0] = ptr
+
+
     def forward(self, block, k_label):
         '''Output: logits, binary mask for positive pairs
         '''
