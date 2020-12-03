@@ -22,7 +22,7 @@ This repository contains the implementation of:
 Soon.
 
 ### Dataset
-* TVL1 optical flow for UCF101: [[download]](http://www.robots.ox.ac.uk/~htd/tar/ucf101_flow_lmdb.tar) (tar file, 20.5GB, extract and place them in the same directory)
+* TVL1 optical flow for UCF101: [[download]](http://www.robots.ox.ac.uk/~htd/tar/ucf101_flow_lmdb.tar) (tar file, 20.5GB, packed with lmdb)
 
 ### Result
 Finetune entire network for action classification on UCF101:
