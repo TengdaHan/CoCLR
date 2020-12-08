@@ -15,6 +15,7 @@ This repository contains the implementation of:
 [[Arxiv]](https://arxiv.org/abs/2010.09709)
 
 ### News
+* [2020.12.08] Update instructions.
 * [2020.11.17] Upload pretrained weights for UCF101 experiments.
 * [2020.10.30] Update "draft" dataloader files, CoCLR code, evaluation code as requested by some researchers. Will check and add detailed instructions later.
 
@@ -41,14 +42,14 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
 --nproc_per_node=2 main_coclr.py --net s3d --topk 5 --moco-k 2048 \
 --dataset ucf101-2stream-2clip --seq_len 32 --ds 1 --batch_size 32 \
---epochs 200 --schedule 100 150 --name_prefix Cycle1-FlowMining_ -j 8 \
+--epochs 100 --schedule 80 --name_prefix Cycle1-FlowMining_ -j 8 \
 --pretrain {rgb_infoNCE_checkpoint.pth.tar} {flow_infoNCE_checkpoint.pth.tar}
 ```
 ```
 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
 --nproc_per_node=2 main_coclr.py --net s3d --topk 5 --moco-k 2048 --reverse \
 --dataset ucf101-2stream-2clip --seq_len 32 --ds 1 --batch_size 32 \
---epochs 200 --schedule 100 150 --name_prefix Cycle1-RGBMining_ -j 8 \
+--epochs 100 --schedule 80 --name_prefix Cycle1-RGBMining_ -j 8 \
 --pretrain {flow_infoNCE_checkpoint.pth.tar} {rgb_cycle1_checkpoint.pth.tar} 
 ```
 
