@@ -259,6 +259,7 @@ def main(args):
             print("=> loaded pretrained checkpoint '{}' (epoch {})".format(args.pretrain, checkpoint['epoch']))
         else:
             print("[Warning] no checkpoint found at '{}', use random init".format(args.pretrain))
+            raise NotImplementedError
     
     else:
         print("=> train from scratch")
@@ -800,7 +801,7 @@ def set_path(args):
 {1}_bs{args.batch_size}_lr{args.lr}_dp{args.dropout}_wd{args.wd}_seq{args.num_seq}_len{args.seq_len}_ds{args.ds}_\
 train-{args.train_what}{0}'.format(
                     '_pt=%s' % args.pretrain.replace('/','-') if args.pretrain else '', \
-                    '_SGD' if args.optim=='sgd' else 'adam', \
+                    '_SGD' if args.optim=='sgd' else '_Adam', \
                     args=args)
 
     img_path = os.path.join(exp_path, 'img')

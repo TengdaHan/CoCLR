@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
 from utils.utils import AverageMeter, write_log, calc_topk_accuracy, calc_mask_accuracy, \
-batch_denorm, ProgressMeter, neq_load_customized, save_checkpoint, Logger
+batch_denorm, ProgressMeter, neq_load_customized, save_checkpoint, Logger, FastDataLoader
 import torch.nn.functional as F 
 import torch.backends.cudnn as cudnn
 from model.pretrain import CoCLR
@@ -125,31 +125,34 @@ def main(args):
 
 
 def main_worker(gpu, ngpus_per_node, args):
-    args.gpu = gpu
-    if args.local_rank != -1: 
-        args.gpu = args.local_rank
-        torch.cuda.set_device(args.gpu)
     best_acc = 0
+    args.gpu = gpu
+
+    if args.distributed:
+        if args.local_rank != -1:
+            args.rank = args.local_rank
+            args.gpu = args.local_rank
+        elif 'SLURM_PROCID' in os.environ: # slurm scheduler
+            args.rank = int(os.environ['SLURM_PROCID'])
+            args.gpu = args.rank % torch.cuda.device_count()
+        elif args.dist_url == "env://" and args.rank == -1:
+            args.rank = int(os.environ["RANK"])
+            if args.multiprocessing_distributed:
+                # For multiprocessing distributed training, rank needs to be the
+                # global rank among all the processes
+                args.rank = args.rank * ngpus_per_node + gpu
+        
+        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
+                                world_size=args.world_size, rank=args.rank)
 
     args.print = args.gpu == 0
     # suppress printing if not master
     if (args.multiprocessing_distributed and args.gpu != 0) or\
-       (args.local_rank != -1 and args.gpu != 0):
+       (args.local_rank != -1 and args.gpu != 0) or\
+       ('SLURM_PROCID' in os.environ and args.rank!=0):
         def print_pass(*args):
             pass
         builtins.print = print_pass
-
-    if args.distributed:
-        if args.dist_url == "env://" and args.rank == -1:
-            args.rank = int(os.environ["RANK"])
-        if args.multiprocessing_distributed:
-            # For multiprocessing distributed training, rank needs to be the
-            # global rank among all the processes
-            args.rank = args.rank * ngpus_per_node + gpu
-        if args.local_rank != -1:
-            args.rank = args.local_rank
-        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                world_size=args.world_size, rank=args.rank)
 
     ### model ###
     print("=> creating {} model with '{}' backbone".format(args.model, args.net))
@@ -348,10 +351,12 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
     losses = AverageMeter('Loss',':.4f')
     top1_meter = AverageMeter('acc@1', ':.4f')
     top5_meter = AverageMeter('acc@5', ':.4f')
+    top1_self_meter = AverageMeter('Self-acc@1', ':.4f')
+    top5_self_meter = AverageMeter('Self-acc@5', ':.4f')
     sacc_meter = AverageMeter('Sampling-Acc@%d' % args.topk, ':.2f')
     progress = ProgressMeter(
         len(data_loader),
-        [batch_time, data_time, losses, top1_meter, top5_meter, sacc_meter],
+        [batch_time, data_time, losses, top1_meter, top5_meter, top1_self_meter, top5_self_meter, sacc_meter],
         prefix='Epoch:[{}]'.format(epoch))
 
     model.train() 
@@ -361,6 +366,7 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
         B = x.size(0)
         return transforms_cuda(x).view(B,3,args.num_seq,args.seq_len,args.img_dim,args.img_dim).transpose(1,2).contiguous()
 
+    tic = time.time()
     end = time.time()
 
     for idx, (input_seq, vname, _) in enumerate(data_loader):
@@ -372,25 +378,27 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
 
         output, mask = model(*input_seq, vname)
         mask_sum = mask.sum(1)
-        
-        if random.random() < 0.9:
-            # because model has been pretrained with infoNCE, 
-            # in this stage, self-similarity is already very high,
-            # randomly mask out the self-similarity for optimization efficiency,
-            mask_clone = mask.clone()
-            mask_clone[mask_sum!=1, 0] = 0 # mask out self-similarity
-            loss = multi_nce_loss(output, mask_clone)
-        else:
-            loss = multi_nce_loss(output, mask)
+
+        loss = multi_nce_loss(output, mask)
 
         top1, top5 = calc_mask_accuracy(output, mask, (1,5))
+        top1_self, top5_self = calc_topk_accuracy(output, torch.zeros(B, dtype=torch.long).cuda(), (1,5))
+
+        del output
+
         losses.update(loss.item(), B)
         top1_meter.update(top1.item(), B)
         top5_meter.update(top5.item(), B)
+        top1_self_meter.update(top1_self.item(), B)
+        top5_self_meter.update(top5_self.item(), B)
         
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        if model.module.queue_is_full:
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        
+        del loss 
+        torch.cuda.empty_cache()
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -401,6 +409,8 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
                 args.train_plotter.add_data('local/loss', losses.local_avg, args.iteration)
                 args.train_plotter.add_data('local/top1', top1_meter.local_avg, args.iteration)
                 args.train_plotter.add_data('local/top5', top5_meter.local_avg, args.iteration)
+                args.train_plotter.add_data('local/self-top1', top1_self_meter.local_avg, args.iteration)
+                args.train_plotter.add_data('local/self-top5', top5_self_meter.local_avg, args.iteration)
 
         args.iteration += 1
         
@@ -411,6 +421,8 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
         args.train_plotter.add_data('global/loss', losses.avg, epoch)
         args.train_plotter.add_data('global/top1', top1_meter.avg, epoch)
         args.train_plotter.add_data('global/top5', top5_meter.avg, epoch)
+        args.train_plotter.add_data('global/self-top1', top1_self_meter.avg, epoch)
+        args.train_plotter.add_data('global/self-top5', top5_self_meter.avg, epoch)
 
     return losses.avg, top1_meter.avg
 
@@ -478,7 +490,7 @@ def get_dataloader(dataset, mode, args):
     print('Creating data loaders for "%s" mode' % mode)
     train_sampler = data.distributed.DistributedSampler(dataset, shuffle=True)
     if mode == 'train':
-        data_loader = data.DataLoader(
+        data_loader = FastDataLoader(
             dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
             num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
     else:

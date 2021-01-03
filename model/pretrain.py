@@ -2,6 +2,7 @@
 import sys
 import math
 import random
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -398,9 +399,7 @@ class CoCLR(InfoNCE):
 
         if not self.queue_is_full:
             self.queue_is_full = torch.all(self.queue_label != -1)
-            
-        if self.queue_is_full: 
-            print('\n===== queue is full now =====')
+            if self.queue_is_full: print('\n===== queue is full now =====')
 
         if self.queue_is_full and (self.topk != 0):
             mask_sim = kf.matmul(self.queue_second.clone().detach())

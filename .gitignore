@@ -31,3 +31,5 @@
 *.npy
 log-*
 !asset/*.png
+*.sh
+slurm/*

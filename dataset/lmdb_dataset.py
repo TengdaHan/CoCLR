@@ -203,8 +203,8 @@ class HMDB51LMDB(UCF101LMDB):
 
 
 class UCF101Flow_LMDB_2CLIP(object):
-    def __init__(self, root='%s/../process_data/data/ucf101_beegfs' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path=os.path.join(lmdb_root, 'UCF101/ucf101_tvl1.lmdb'),
+    def __init__(self, root='%s/../process_data/data/ucf101' % os.path.dirname(os.path.abspath(__file__)), 
+                 db_path=os.path.join(lmdb_root, 'UCF101/my_tvl1_flow/ucf101_my_tvl1_frame.lmdb'),
                  transform=None, mode='val',
                  num_frames=32, ds=1, which_split=1,
                  return_label=False,
@@ -662,7 +662,7 @@ class KineticsLMDB_2CLIP(object):
 
 class K400_LMDB_2CLIP(KineticsLMDB_2CLIP):
     def __init__(self, root='%s/../process_data/data/k400' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path=os.path.join(lmdb_root, 'Kinetics400/frame/'), 
+                 db_path=os.path.join('/users/htd/beegfs/', 'kinetics400-256/frame_full/lmdb/'), 
                  filename='k400_frame',
                  **kwargs):
         super(K400_LMDB_2CLIP, self).__init__(root=root, db_path=db_path, filename=filename, is_flow=False, **kwargs)
@@ -670,8 +670,8 @@ class K400_LMDB_2CLIP(KineticsLMDB_2CLIP):
 
 class K400_Flow_LMDB_2CLIP(KineticsLMDB_2CLIP):
     def __init__(self, root='%s/../process_data/data/k400' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path=os.path.join(lmdb_root, 'Kinetics400/tvl1_flow/'), 
-                 filename='k400_tvl1',
+                 db_path=os.path.join('/users/htd/beegfs/', 'kinetics400-256/tvl1_flow/lmdb/'), 
+                 filename='k400_tvl1_frame',
                  **kwargs):
         super(K400_Flow_LMDB_2CLIP, self).__init__(root=root, db_path=db_path, filename=filename, is_flow=True, **kwargs)
 
@@ -838,9 +838,9 @@ class Kinetics_2STREAM_LMDB_2CLIP(object):
 
 class K400_2STREAM_LMDB_2CLIP(Kinetics_2STREAM_LMDB_2CLIP):
     def __init__(self, root='%s/../process_data/data/k400' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path_flow=os.path.join(lmdb_root, 'Kinetics400/tvl1_flow/'),
-                 db_path_rgb=os.path.join(lmdb_root, 'Kinetics400/frame/'),
-                 filename_flow='k400_tvl1', 
+                 db_path_flow=os.path.join('/users/htd/beegfs/', 'kinetics400-256/tvl1_flow/lmdb/'),
+                 db_path_rgb=os.path.join('/users/htd/beegfs/', 'kinetics400-256/frame_full/lmdb/'),
+                 filename_flow='k400_tvl1_frame', 
                  filename_rgb='k400_frame',
                  **kwargs):
         super(K400_2STREAM_LMDB_2CLIP, self).__init__(root=root, db_path_flow=db_path_flow, 

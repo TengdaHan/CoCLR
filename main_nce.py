@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
 from utils.utils import AverageMeter, write_log, calc_topk_accuracy, calc_mask_accuracy, \
-batch_denorm, ProgressMeter, neq_load_customized, save_checkpoint, Logger
+batch_denorm, ProgressMeter, neq_load_customized, save_checkpoint, Logger, FastDataLoader
 import torch.nn.functional as F 
 import torch.backends.cudnn as cudnn
 from model.pretrain import InfoNCE, UberNCE
@@ -58,6 +58,7 @@ def parse_args():
     parser.add_argument('--reset_lr', action='store_true', help='Reset learning rate when resume training?')
     parser.add_argument('--img_dim', default=128, type=int)
     parser.add_argument('--prefix', default='pretrain', type=str)
+    parser.add_argument('--name_prefix', default='', type=str)
     parser.add_argument('-j', '--workers', default=16, type=int)
     parser.add_argument('--seed', default=0, type=int)
 
@@ -122,31 +123,32 @@ def main(args):
 
 
 def main_worker(gpu, ngpus_per_node, args):
-    args.gpu = gpu
-    if args.local_rank != -1: 
-        args.gpu = args.local_rank
-        torch.cuda.set_device(args.gpu)
     best_acc = 0
+    args.gpu = gpu
+
+    if args.distributed:
+        if args.local_rank != -1: # torch.distributed.launch
+            args.rank = args.local_rank
+            args.gpu = args.local_rank
+        elif 'SLURM_PROCID' in os.environ: # slurm scheduler
+            args.rank = int(os.environ['SLURM_PROCID'])
+            args.gpu = args.rank % torch.cuda.device_count()
+        elif args.dist_url == "env://" and args.rank == -1:
+            args.rank = int(os.environ["RANK"])
+            if args.multiprocessing_distributed:
+                # For multiprocessing distributed training, rank needs to be the
+                # global rank among all the processes
+                args.rank = args.rank * ngpus_per_node + gpu
+        
+        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
+                                world_size=args.world_size, rank=args.rank)
 
     args.print = args.gpu == 0
     # suppress printing if not master
-    if (args.multiprocessing_distributed and args.gpu != 0) or\
-       (args.local_rank != -1 and args.gpu != 0):
+    if args.rank!=0:
         def print_pass(*args):
             pass
         builtins.print = print_pass
-
-    if args.distributed:
-        if args.dist_url == "env://" and args.rank == -1:
-            args.rank = int(os.environ["RANK"])
-        if args.multiprocessing_distributed:
-            # For multiprocessing distributed training, rank needs to be the
-            # global rank among all the processes
-            args.rank = args.rank * ngpus_per_node + gpu
-        if args.local_rank != -1:
-            args.rank = args.local_rank
-        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                world_size=args.world_size, rank=args.rank)
 
     ### model ###
     print("=> creating {} model with '{}' backbone".format(args.model, args.net))
@@ -299,6 +301,7 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
         return transforms_cuda(x).view(B,3,args.num_seq,args.seq_len,args.img_dim,args.img_dim)\
         .transpose(1,2).contiguous()
 
+    tic = time.time()
     end = time.time()
 
     for idx, (input_seq, label) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
@@ -412,7 +415,7 @@ def get_dataloader(dataset, mode, args):
     print('Creating data loaders for "%s" mode' % mode)
     train_sampler = data.distributed.DistributedSampler(dataset, shuffle=True)
     if mode == 'train':
-        data_loader = data.DataLoader(
+        data_loader = FastDataLoader(
             dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
             num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
     else:
@@ -424,7 +427,7 @@ def set_path(args):
     if args.resume: exp_path = os.path.dirname(os.path.dirname(args.resume))
     elif args.test: exp_path = os.path.dirname(os.path.dirname(args.test))
     else:
-        exp_path = 'log-{args.prefix}/{args.model}_k{args.moco_k}_{args.dataset}-{args.img_dim}_{args.net}_\
+        exp_path = 'log-{args.prefix}/{args.name_prefix}{args.model}_k{args.moco_k}_{args.dataset}-{args.img_dim}_{args.net}_\
 bs{args.batch_size}_lr{args.lr}_seq{args.num_seq}_len{args.seq_len}_ds{args.ds}{0}'.format(
                     '_pt=%s' % args.pretrain.replace('/','-') if args.pretrain else '', \
                     args=args)
@@ -441,7 +444,7 @@ bs{args.batch_size}_lr{args.lr}_seq{args.num_seq}_len{args.seq_len}_ds{args.ds}{
 if __name__ == '__main__':
     '''
     Three ways to run (recommend first one for simplicity):
-    1. CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch\
+    1. CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
        --nproc_per_node=2 main_nce.py (do not use multiprocessing-distributed) ...
 
        This mode overwrites WORLD_SIZE, overwrites rank with local_rank
