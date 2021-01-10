@@ -479,7 +479,7 @@ def test_10crop(dataset, model, criterion, transforms_cuda, device, epoch, args)
                                               num_workers=args.workers,
                                               pin_memory=True)
 
-                for idx, (input_seq, _) in tqdm(enumerate(data_loader), total=len(data_loader)):
+                for idx, (input_seq, target) in tqdm(enumerate(data_loader), total=len(data_loader)):
                     input_seq = tr(input_seq.to(device, non_blocking=True))
                     input_seq = input_seq.squeeze(1) # num_seq is always 1, seqeeze it
                     logit, _ = model(input_seq)
@@ -487,12 +487,11 @@ def test_10crop(dataset, model, criterion, transforms_cuda, device, epoch, args)
                     # average probability along the temporal window
                     prob_mean = F.softmax(logit, dim=-1).mean(0, keepdim=True)
 
+                    target, vname = target
                     vname = vname[0]
                     if vname not in prob_dict.keys():
-                        prob_dict[vname] = {'mean_prob':[],'last_prob':[]}
+                        prob_dict[vname] = {'mean_prob':[],}
                     prob_dict[vname]['mean_prob'].append(prob_mean)
-                    prob_dict[vname]['last_prob'].append(prob_last)
-
 
                 if (title == 'ten') and (flip_idx == 0) and (aug_idx == 5):
                     print('center-crop result:')

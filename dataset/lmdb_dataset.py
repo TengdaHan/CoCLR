@@ -88,8 +88,10 @@ class UCF101LMDB_2CLIP(object):
         video_info[3] = video_info[2]+'/'+video_info[0].str.split('/').str.get(-2)
         assert len(pd.unique(video_info[2])) == self.num_class
 
-        # load video source to id dictionary
-        self.video_source = read_json(os.path.join(root, 'video_source.json'))
+        # load video source to id dictionary, 
+        # only useful to handle sibling videos in UCF101 pre-training
+        if self.return_source:
+            self.video_source = read_json(os.path.join(root, 'video_source.json'))
         
         self.get_video_id = dict(zip([i.decode() for i in self.db_order], 
                                      ['%09d'%i for i in range(len(self.db_order))]))
@@ -246,7 +248,8 @@ class UCF101Flow_LMDB_2CLIP(object):
         assert len(pd.unique(video_info[2])) == self.num_class
 
         # load video source to id dictionary
-        self.video_source = read_json(os.path.join(root, 'video_source.json'))
+        if self.return_source:
+            self.video_source = read_json(os.path.join(root, 'video_source.json'))
 
         # check vlen because flow may have different num_frames as rgb.
         vname_list = [i.decode() for i in self.db_order]
@@ -361,7 +364,7 @@ class UCF101Flow_LMDB(UCF101Flow_LMDB_2CLIP):
 
 class HMDB51Flow_LMDB(UCF101Flow_LMDB):
     def __init__(self, root='%s/../process_data/data/hmdb51' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path=os.path.join(lmdb_root, 'HMDB51/hmdb51_tvl1.lmdb'),
+                 db_path=os.path.join(lmdb_root, 'HMDB51/lmdb/hmdb51_my_tvl1_frame.lmdb'),
                  **kwargs):
         super(HMDB51Flow_LMDB, self).__init__(root=root, db_path=db_path, **kwargs)
 
