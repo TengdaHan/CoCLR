@@ -15,6 +15,8 @@ This repository contains the implementation of:
 [[Arxiv]](https://arxiv.org/abs/2010.09709)
 
 ### News
+* [2021.01.29] Upload both RGB and optical flow dataset for UCF101 [(links)](#dataset). 
+* [2021.01.11] Update our paper for NeurIPS2020 final version: corrected InfoNCE-RGB-linearProbe baseline result in Table1 from 52.3% (pretrained for 800 epochs, unnessary and unfair) to 46.8% (pretrained for 500 epochs, fair comparison). Thanks [@liuhualin333](https://github.com/liuhualin333) for pointing out.
 * [2020.12.08] Update instructions.
 * [2020.11.17] Upload pretrained weights for UCF101 experiments.
 * [2020.10.30] Update "draft" dataloader files, CoCLR code, evaluation code as requested by some researchers. Will check and add detailed instructions later.
@@ -86,7 +88,8 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
 ```
 
 ### Dataset
-* TVL1 optical flow for UCF101: [[download]](http://www.robots.ox.ac.uk/~htd/tar/ucf101_flow_lmdb.tar) (tar file, 20.5GB, packed with lmdb)
+* RGB for UCF101: [[download]](http://thor.robots.ox.ac.uk/~vgg/data/CoCLR/ucf101_rgb_lmdb.tar) (tar file, 29GB, packed with lmdb)
+* TVL1 optical flow for UCF101: [[download]](http://thor.robots.ox.ac.uk/~vgg/data/CoCLR/ucf101_flow_lmdb.tar) (tar file, 20.5GB, packed with lmdb)
 
 ### Result
 Finetune entire network for action classification on UCF101:
