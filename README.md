@@ -90,6 +90,7 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
 ### Dataset
 * RGB for UCF101: [[download]](http://thor.robots.ox.ac.uk/~vgg/data/CoCLR/ucf101_rgb_lmdb.tar) (tar file, 29GB, packed with lmdb)
 * TVL1 optical flow for UCF101: [[download]](http://thor.robots.ox.ac.uk/~vgg/data/CoCLR/ucf101_flow_lmdb.tar) (tar file, 20.5GB, packed with lmdb)
+* Note: I created these lmdb files with msgpack==0.6.2, when load them with msgpack>=1.0.0, you can do `msgpack.loads(raw_data, raw=True)`([issue#32](https://github.com/TengdaHan/CoCLR/issues/32))
 
 ### Result
 Finetune entire network for action classification on UCF101:
