@@ -106,4 +106,9 @@ Baseline models:
 * UCF101-RGB-InfoNCE: [[download]](http://www.robots.ox.ac.uk/~htd/coclr/InfoNCE-ucf101-rgb-128-s3d-ep399.pth.tar) [NN@1=33.1 on UCF101-RGB]
 * UCF101-Flow-InfoNCE: [[download]](http://www.robots.ox.ac.uk/~htd/coclr/InfoNCE-ucf101-f-128-s3d-ep396.pth.tar) [NN@1=45.2 on UCF101-Flow]
 
-Kinetics400-pretrained models comming soon. 
+Kinetics400-pretrained models：
+* K400-RGB-CoCLR: [[download]](http://www.robots.ox.ac.uk/~htd/coclr/CoCLR-k400-rgb-128-s3d.pth.tar) [NN@1=45.6, Finetune-Acc@1=87.89 on UCF101-RGB]
+* K400-Flow-CoCLR: [[download]](http://www.robots.ox.ac.uk/~htd/coclr/CoCLR-k400-flow-128-s3d.pth.tar) [NN@1=44.4, Finetune-Acc@1=85.27 on UCF101-Flow]
+* Two-stream result by average the class probability: 0.8789 + 0.8527 => 0.9061
+
+
