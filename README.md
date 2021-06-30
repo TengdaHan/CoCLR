@@ -87,6 +87,55 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
 --pretrain {flow_infoNCE_checkpoint.pth.tar} {rgb_cycle1_checkpoint.pth.tar} 
 ```
 
+### Finetune Instruction
+`cd eval/`
+e.g. finetune UCF101-rgb:
+```
+CUDA_VISIBLE_DEVICES=0,1 python main_classifier.py --net s3d --dataset ucf101 \
+--seq_len 32 --ds 1 --batch_size 32 --train_what ft --epochs 500 --schedule 400 450 \
+--pretrain {selected_rgb_pretrained_checkpoint.pth.tar}
+```
+then run the test with 10-crop (test-time augmentation is helpful, 10-crop gives better result than center-crop):
+```
+CUDA_VISIBLE_DEVICES=0,1 python main_classifier.py --net s3d --dataset ucf101 \
+--seq_len 32 --ds 1 --batch_size 32 --train_what ft --epochs 500 --schedule 400 450 \
+--test {selected_rgb_finetuned_checkpoint.pth.tar} --ten_crop
+```
+
+### Nearest-neighbour Retrieval Instruction
+`cd eval/`
+e.g. nn-retrieval for UCF101-rgb
+```
+CUDA_VISIBLE_DEVICES=0 python main_classifier.py --net s3d --dataset ucf101 \
+--seq_len 32 --ds 1 --test {selected_rgb_pretrained_checkpoint.pth.tar} --retrieval
+```
+
+### Linear-probe Instruction
+`cd eval/`
+#### from extracted feature
+The code support two methods on linear-probe, 
+either feed the data end-to-end and freeze the backbone, 
+or train linear layer on extracted features.
+Both methods give similar best results in our experiments.
+
+e.g. on extracted features (after run NN-retrieval command above, features will be saved in `os.path.dirname(checkpoint)`)
+```
+CUDA_VISIBLE_DEVICES=0 python feature_linear_probe.py --dataset ucf101 \
+--test {feature_dirname} --final_bn --lr 1.0 --wd 1e-3
+```
+Note that the default setting should give an alright performance, maybe 1-2% lower than our paper's figure. 
+For different datasets, `lr` and `wd` need to be tuned from lr: 0.1 to 1.0; wd: 1e-4 to 1e-1.
+
+#### load data and freeze backbone
+alternatively, feed data end-to-end and freeze the backbone.
+```
+CUDA_VISIBLE_DEVICES=0,1 python main_classifier.py --net s3d --dataset ucf101 \
+--seq_len 32 --ds 1 --batch_size 32 --train_what last --epochs 100 --schedule 60 80 \
+--optim sgd --lr 1e-1 --wd 1e-3 --final_bn --pretrain {selected_rgb_pretrained_checkpoint.pth.tar}
+```
+Similarly, `lr` and `wd` need to be tuned for different datasets for best performance.  
+
+
 ### Dataset
 * RGB for UCF101: [[download]](http://thor.robots.ox.ac.uk/~vgg/data/CoCLR/ucf101_rgb_lmdb.tar) (tar file, 29GB, packed with lmdb)
 * TVL1 optical flow for UCF101: [[download]](http://thor.robots.ox.ac.uk/~vgg/data/CoCLR/ucf101_flow_lmdb.tar) (tar file, 20.5GB, packed with lmdb)
@@ -106,4 +155,9 @@ Baseline models:
 * UCF101-RGB-InfoNCE: [[download]](http://www.robots.ox.ac.uk/~htd/coclr/InfoNCE-ucf101-rgb-128-s3d-ep399.pth.tar) [NN@1=33.1 on UCF101-RGB]
 * UCF101-Flow-InfoNCE: [[download]](http://www.robots.ox.ac.uk/~htd/coclr/InfoNCE-ucf101-f-128-s3d-ep396.pth.tar) [NN@1=45.2 on UCF101-Flow]
 
-Kinetics400-pretrained models comming soon. 
+Kinetics400-pretrained models：
+* K400-RGB-CoCLR: [[download]](http://www.robots.ox.ac.uk/~htd/coclr/CoCLR-k400-rgb-128-s3d.pth.tar) [NN@1=45.6, Finetune-Acc@1=87.89 on UCF101-RGB]
+* K400-Flow-CoCLR: [[download]](http://www.robots.ox.ac.uk/~htd/coclr/CoCLR-k400-flow-128-s3d.pth.tar) [NN@1=44.4, Finetune-Acc@1=85.27 on UCF101-Flow]
+* Two-stream result by average the class probability: 0.8789 + 0.8527 => 0.9061
+
+
