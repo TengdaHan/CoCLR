@@ -206,7 +206,7 @@ class HMDB51LMDB(UCF101LMDB):
 
 class UCF101Flow_LMDB_2CLIP(object):
     def __init__(self, root='%s/../process_data/data/ucf101' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path=os.path.join(lmdb_root, 'UCF101/my_tvl1_flow/ucf101_my_tvl1_frame.lmdb'),
+                 db_path=os.path.join(lmdb_root, 'UCF101/ucf101_tvl1_frame.lmdb'),
                  transform=None, mode='val',
                  num_frames=32, ds=1, which_split=1,
                  return_label=False,
@@ -364,14 +364,14 @@ class UCF101Flow_LMDB(UCF101Flow_LMDB_2CLIP):
 
 class HMDB51Flow_LMDB(UCF101Flow_LMDB):
     def __init__(self, root='%s/../process_data/data/hmdb51' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path=os.path.join(lmdb_root, 'HMDB51/lmdb/hmdb51_my_tvl1_frame.lmdb'),
+                 db_path=os.path.join(lmdb_root, 'HMDB51/hmdb51_tvl1_frame.lmdb'),
                  **kwargs):
         super(HMDB51Flow_LMDB, self).__init__(root=root, db_path=db_path, **kwargs)
 
 
 class UCF101_2STREAM_LMDB_2CLIP(object):
     def __init__(self, root='%s/../process_data/data/ucf101' % os.path.dirname(os.path.abspath(__file__)), 
-                 db_path_flow=os.path.join(lmdb_root, 'UCF101/ucf101_tvl1.lmdb'),
+                 db_path_flow=os.path.join(lmdb_root, 'UCF101/ucf101_tvl1_frame.lmdb'),
                  db_path_rgb=os.path.join(lmdb_root, 'UCF101/ucf101_frame.lmdb'),
                  transform=None, mode='val',
                  num_frames=32, ds=1, which_split=1,
