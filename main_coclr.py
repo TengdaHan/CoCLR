@@ -379,7 +379,15 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
         output, mask = model(*input_seq, vname)
         mask_sum = mask.sum(1)
 
-        loss = multi_nce_loss(output, mask)
+        if random.random() < 0.9:
+            # because model has been pretrained with infoNCE, 
+            # in this stage, self-similarity is already very high,
+            # randomly mask out the self-similarity for optimization efficiency,
+            mask_clone = mask.clone()
+            mask_clone[mask_sum!=1, 0] = 0 # mask out self-similarity
+            loss = multi_nce_loss(output, mask_clone)
+        else:
+            loss = multi_nce_loss(output, mask)
 
         top1, top5 = calc_mask_accuracy(output, mask, (1,5))
         top1_self, top5_self = calc_topk_accuracy(output, torch.zeros(B, dtype=torch.long).cuda(), (1,5))
