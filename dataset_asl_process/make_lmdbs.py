@@ -42,7 +42,7 @@ class VideoSample:
 
 def normalize_count(value: Optional[int]) -> Optional[int]:
     """
-    None yoki manfiy qiymat barcha mavjud elementlarni olishni anglatadi.
+    None or a negative value means selecting all available elements.
     """
     if value is None or value < 0:
         return None
@@ -52,7 +52,7 @@ def normalize_count(value: Optional[int]) -> Optional[int]:
 
 def remove_existing_lmdb(lmdb_path: Path) -> None:
     """
-    Oldingi LMDB va unga tegishli yordamchi fayllarni o'chiradi.
+    Removes the existing LMDB and its associated auxiliary files.
     """
     targets = [
         lmdb_path,
@@ -71,7 +71,7 @@ def remove_existing_lmdb(lmdb_path: Path) -> None:
 def get_gloss_directories(split_dir: Path) -> list[Path]:
     if not split_dir.exists():
         raise FileNotFoundError(
-            f"Split papkasi topilmadi: {split_dir}"
+            f"Split directory not found: {split_dir}"
         )
 
     gloss_dirs = sorted(
@@ -85,7 +85,7 @@ def get_gloss_directories(split_dir: Path) -> list[Path]:
 
 def get_video_directories(gloss_dir: Path) -> list[Path]:
     """
-    Faqat ichida JPEG freym mavjud bo'lgan papkalarni qaytaradi.
+    Returns only directories that contain JPEG frames.
     """
     video_dirs: list[Path] = []
 
@@ -107,7 +107,7 @@ def get_video_directories(gloss_dir: Path) -> list[Path]:
 
 def read_video_frames(video_dir: Path) -> list[bytes]:
     """
-    Video papkasidagi JPEG freymlarni tartib bilan raw bytes sifatida o'qiydi.
+    Reads JPEG frames from a video directory in sorted order as raw bytes.
     """
     frame_paths = sorted(
         path
@@ -118,7 +118,7 @@ def read_video_frames(video_dir: Path) -> list[bytes]:
 
     if not frame_paths:
         raise ValueError(
-            f"JPEG freymlar topilmadi: {video_dir}"
+            f"No JPEG frames found: {video_dir}"
         )
 
     frames: list[bytes] = []
@@ -137,9 +137,9 @@ def choose_classes(
     random_generator: random.Random,
 ) -> list[str]:
     """
-    Splitlar orasidagi umumiy class/gloss nomlaridan classlarni tanlaydi.
+    Selects classes from the class/gloss names shared across all splits.
 
-    Bu train, val va test LMDBlarida bir xil classlar bo'lishini ta'minlaydi.
+    This ensures that train, val, and test LMDBs contain the same classes.
     """
     split_class_sets: list[set[str]] = []
 
@@ -152,13 +152,13 @@ def choose_classes(
         split_class_sets.append(gloss_names)
 
     if not split_class_sets:
-        raise ValueError("Hech qanday split berilmadi.")
+        raise ValueError("No splits were provided.")
 
     common_classes = set.intersection(*split_class_sets)
 
     if not common_classes:
         raise ValueError(
-            "Train, val va test splitlari orasida umumiy class topilmadi."
+            "No common classes were found across the train, val, and test splits."
         )
 
     classes = sorted(common_classes)
@@ -169,8 +169,8 @@ def choose_classes(
     if class_cnt is not None:
         if class_cnt > len(classes):
             raise ValueError(
-                f"class_cnt={class_cnt}, lekin barcha splitlarda mavjud "
-                f"umumiy classlar soni faqat {len(classes)}."
+                f"class_cnt={class_cnt}, but only {len(classes)} common "
+                f"classes are available across all splits."
             )
 
         classes = classes[:class_cnt]
@@ -186,7 +186,7 @@ def choose_split_samples(
     random_generator: random.Random,
 ) -> list[VideoSample]:
     """
-    Har bir class uchun kerakli miqdordagi videoni tanlaydi.
+    Selects the requested number of videos for each class.
     """
     videos_per_class = normalize_count(videos_per_class)
     samples: list[VideoSample] = []
@@ -201,8 +201,8 @@ def choose_split_samples(
             if videos_per_class > len(video_dirs):
                 raise ValueError(
                     f"Split='{split}', class='{gloss}': "
-                    f"{videos_per_class} ta video so'ralgan, "
-                    f"lekin faqat {len(video_dirs)} ta video mavjud."
+                    f"{videos_per_class} videos were requested, "
+                    f"but only {len(video_dirs)} videos are available."
                 )
 
             video_dirs = video_dirs[:videos_per_class]
@@ -216,7 +216,7 @@ def choose_split_samples(
             for video_dir in video_dirs
         )
 
-    # LMDB indekslarini tasodifiy tartibda berish.
+    # Randomize LMDB index order.
     random_generator.shuffle(samples)
 
     return samples
@@ -224,16 +224,16 @@ def choose_split_samples(
 
 def estimate_map_size(samples: Sequence[VideoSample]) -> int:
     """
-    LMDB map_size uchun taxminiy joy hisoblaydi.
+    Estimates the required LMDB map_size.
 
-    JPEG fayllarning jami hajmiga zaxira qo'shiladi.
+    Adds extra capacity to the total size of the JPEG files.
     Minimum: 1 GiB.
     """
     total_bytes = 0
 
     for sample in tqdm(
         samples,
-        desc="LMDB hajmini hisoblash",
+        desc="Estimating LMDB size",
         unit="video",
         leave=False,
     ):
@@ -258,11 +258,11 @@ def write_split_lmdb(
     map_size: Optional[int] = None,
 ) -> None:
     """
-    Bitta splitni CoCLR formatidagi LMDB sifatida yozadi.
+    Writes a single split as an LMDB in CoCLR format.
     """
     if not samples:
         raise ValueError(
-            f"'{split}' split uchun yoziladigan video mavjud emas."
+            f"No videos are available to write for the '{split}' split."
         )
 
     remove_existing_lmdb(lmdb_path)
@@ -274,9 +274,9 @@ def write_split_lmdb(
     started_at = time.perf_counter()
 
     print()
-    print(f"[{split.upper()}] LMDB yaratish boshlandi")
-    print(f"Manzil: {lmdb_path}")
-    print(f"Videolar soni: {len(samples)}")
+    print(f"[{split.upper()}] LMDB creation started")
+    print(f"Path: {lmdb_path}")
+    print(f"Number of videos: {len(samples)}")
     print(f"LMDB map_size: {map_size / 1024**3:.2f} GiB")
 
     environment = lmdb.open(
@@ -317,7 +317,7 @@ def write_split_lmdb(
 
             if not success:
                 raise RuntimeError(
-                    f"LMDB'ga yozib bo'lmadi: {sample.relative_name}"
+                    f"Could not write to LMDB: {sample.relative_name}"
                 )
 
             keys.append(key)
@@ -366,14 +366,14 @@ def write_split_lmdb(
 
     environment.close()
 
-    # CoCLR original skriptidagi tashqi order fayli.
+    # External order file used by the original CoCLR script.
     order_path = Path(f"{lmdb_path}-order")
     order_path.write_text(
         "\n".join(order),
         encoding="utf-8",
     )
 
-    # Tekshirish va debugging uchun qo'shimcha manifest.
+    # Additional manifest for verification and debugging.
     manifest_path = Path(f"{lmdb_path}-manifest.txt")
     with manifest_path.open("w", encoding="utf-8") as file:
         file.write("index\tsplit\tgloss\tvideo\tframe_count\n")
@@ -392,16 +392,16 @@ def write_split_lmdb(
     elapsed = time.perf_counter() - started_at
 
     print(
-        f"[{split.upper()}] Tugadi: "
-        f"{len(samples)} ta video, "
-        f"{sum(video_lengths)} ta freym, "
+        f"[{split.upper()}] Completed: "
+        f"{len(samples)} videos, "
+        f"{sum(video_lengths)} frames, "
         f"{format_duration(elapsed)}"
     )
 
 
 def verify_lmdb(lmdb_path: Path) -> None:
     """
-    Yaratilgan LMDB metadata va birinchi videoni tekshiradi.
+    Verifies the generated LMDB metadata and the first video entry.
     """
     environment = lmdb.open(
         str(lmdb_path),
@@ -429,7 +429,7 @@ def verify_lmdb(lmdb_path: Path) -> None:
                 )
             ):
                 raise RuntimeError(
-                    f"LMDB metadata to'liq emas: {lmdb_path}"
+                    f"LMDB metadata is incomplete: {lmdb_path}"
                 )
 
             length = msgpack.loads(
@@ -451,17 +451,17 @@ def verify_lmdb(lmdb_path: Path) -> None:
 
             if length != len(keys):
                 raise RuntimeError(
-                    f"__len__={length}, lekin keys={len(keys)}"
+                    f"__len__={length}, but keys={len(keys)}"
                 )
 
             if len(order) != length:
                 raise RuntimeError(
-                    f"Order soni noto'g'ri: {len(order)} != {length}"
+                    f"Incorrect order length: {len(order)} != {length}"
                 )
 
             if len(video_lengths) != length:
                 raise RuntimeError(
-                    "Video uzunliklari soni noto'g'ri."
+                    "Incorrect number of video lengths."
                 )
 
             if length > 0:
@@ -469,7 +469,7 @@ def verify_lmdb(lmdb_path: Path) -> None:
 
                 if first_frames_raw is None:
                     raise RuntimeError(
-                        "Birinchi video LMDB'da topilmadi."
+                        "The first video was not found in the LMDB."
                     )
 
                 first_frames = msgpack.loads(
@@ -479,13 +479,13 @@ def verify_lmdb(lmdb_path: Path) -> None:
 
                 if len(first_frames) != video_lengths[0]:
                     raise RuntimeError(
-                        "Birinchi videoning frame soni metadata bilan mos emas."
+                        "The first video's frame count does not match the metadata."
                     )
 
     finally:
         environment.close()
 
-    print(f"Tekshirildi: {lmdb_path}")
+    print(f"Verified: {lmdb_path}")
 
 
 def format_duration(seconds: float) -> str:
@@ -495,12 +495,12 @@ def format_duration(seconds: float) -> str:
     minutes, seconds = divmod(remainder, 60)
 
     if hours:
-        return f"{hours} soat {minutes} daqiqa {seconds} soniya"
+        return f"{hours} hours {minutes} minutes {seconds} seconds"
 
     if minutes:
-        return f"{minutes} daqiqa {seconds} soniya"
+        return f"{minutes} minutes {seconds} seconds"
 
-    return f"{seconds} soniya"
+    return f"{seconds} seconds"
 
 
 def convert_dataset_to_lmdb(
@@ -515,33 +515,33 @@ def convert_dataset_to_lmdb(
     verify: bool = True,
 ) -> None:
     """
-    Datasetning train/test/val splitlarini alohida LMDBlarga o'tkazadi.
+    Converts the dataset's train/test/val splits into separate LMDB files.
 
-    Parametrlar:
+    Parameters:
         dataset_root:
-            train/, test/, val/ papkalari joylashgan manzil.
+            Path containing the train/, test/, and val/ directories.
 
         output_root:
-            LMDB fayllari yoziladigan papka.
+            Directory where the LMDB files will be written.
 
         class_cnt:
-            Nechta umumiy class tanlanishi.
-            None yoki -1 = barcha classlar.
+            Number of common classes to select.
+            None or -1 = all classes.
 
         train_cnt, test_cnt, val_cnt:
-            Har bir tanlangan classdan tegishli split uchun
-            nechta video olinishi.
-            None yoki -1 = barcha videolar.
+            Number of videos to select from each selected class
+            for the corresponding split.
+            None or -1 = all videos.
 
         random_seed:
-            Class va videolarni reproduktiv random tanlash uchun seed.
+            Seed for reproducible random selection of classes and videos.
     """
     dataset_root = Path(dataset_root).expanduser().resolve()
     output_root = Path(output_root).expanduser().resolve()
 
     if not dataset_root.exists():
         raise FileNotFoundError(
-            f"Dataset manzili topilmadi: {dataset_root}"
+            f"Dataset path not found: {dataset_root}"
         )
 
     output_root.mkdir(parents=True, exist_ok=True)
@@ -562,15 +562,15 @@ def convert_dataset_to_lmdb(
     )
 
     print(f"Random seed: {random_seed}")
-    print(f"Tanlangan classlar soni: {len(selected_classes)}")
-    # print("Tanlangan classlar:")
+    print(f"Number of selected classes: {len(selected_classes)}")
+    # print("Selected classes:")
     # for class_name in selected_classes:
     #     print(f"  - {class_name}")
 
     total_started_at = time.perf_counter()
 
     for split_index, (split, count) in enumerate(split_counts.items()):
-        # Har bir split uchun deterministik, lekin alohida random oqim.
+        # Use a deterministic but separate random stream for each split.
         split_random_generator = random.Random(
             random_seed + split_index + 1
         )
@@ -599,8 +599,8 @@ def convert_dataset_to_lmdb(
 
     print()
     print(
-        "Barcha splitlar tayyorlandi. "
-        f"Umumiy vaqt: {format_duration(total_elapsed)}"
+        "All splits have been prepared. "
+        f"Total time: {format_duration(total_elapsed)}"
     )
 
 
@@ -609,9 +609,9 @@ def smoke_test(
     output_root: str | Path,
 ) -> None:
     """
-    Har bir splitdan bitta class va bitta video bilan tezkor test.
+    Quick test using one class and one video from each split.
     """
-    print("Smoke test boshlandi.")
+    print("Smoke test started.")
 
     convert_dataset_to_lmdb(
         dataset_root=dataset_root,
@@ -628,7 +628,7 @@ def smoke_test(
 
 def parse_optional_count(value: str) -> Optional[int]:
     """
-    CLI'da 'all', 'none' yoki -1 qiymatlarini None ga o'tkazadi.
+    Converts CLI values 'all', 'none', or -1 to None.
     """
     normalized = value.strip().lower()
 
@@ -646,8 +646,8 @@ def parse_optional_count(value: str) -> Optional[int]:
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Frame papkalaridan CoCLR formatidagi "
-            "train/test/val LMDB yaratish."
+            "Create train/test/val LMDB files in CoCLR format "
+            "from frame directories."
         )
     )
 
@@ -655,37 +655,37 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--dataset-root",
         type=Path,
         required=True,
-        help="train/, test/ va val/ joylashgan dataset papkasi.",
+        help="Dataset directory containing train/, test/, and val/.",
     )
     parser.add_argument(
         "--output-root",
         type=Path,
         required=True,
-        help="LMDB fayllari yoziladigan papka.",
+        help="Directory where LMDB files will be written.",
     )
     parser.add_argument(
         "--class-cnt",
         type=parse_optional_count,
         default=None,
-        help="Classlar soni. Default: all.",
+        help="Number of classes. Default: all.",
     )
     parser.add_argument(
         "--train-cnt",
         type=parse_optional_count,
         default=None,
-        help="Har bir classdan train videolar soni. Default: all.",
+        help="Number of train videos per class. Default: all.",
     )
     parser.add_argument(
         "--test-cnt",
         type=parse_optional_count,
         default=None,
-        help="Har bir classdan test videolar soni. Default: all.",
+        help="Number of test videos per class. Default: all.",
     )
     parser.add_argument(
         "--val-cnt",
         type=parse_optional_count,
         default=None,
-        help="Har bir classdan val videolar soni. Default: all.",
+        help="Number of validation videos per class. Default: all.",
     )
     parser.add_argument(
         "--random-seed",
@@ -697,17 +697,17 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--commit-interval",
         type=int,
         default=100,
-        help="Har nechta videodan keyin LMDB commit qilinishi.",
+        help="Number of videos between LMDB commits.",
     )
     parser.add_argument(
         "--smoke-test",
         action="store_true",
-        help="1 class va har bir splitdan 1 video bilan test.",
+        help="Test with 1 class and 1 video from each split.",
     )
     parser.add_argument(
         "--no-verify",
         action="store_true",
-        help="Yaratilgan LMDB'ni yakuniy tekshirishni o'chiradi.",
+        help="Disable final verification of the generated LMDB.",
     )
 
     return parser
@@ -718,7 +718,7 @@ def main() -> None:
     arguments = parser.parse_args()
 
     if arguments.commit_interval <= 0:
-        parser.error("--commit-interval musbat son bo'lishi kerak.")
+        parser.error("--commit-interval must be a positive integer.")
 
     if arguments.smoke_test:
         smoke_test(

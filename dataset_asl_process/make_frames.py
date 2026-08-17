@@ -39,7 +39,7 @@ class VideoSample:
 
 def normalize_count(value: Optional[int]) -> Optional[int]:
     """
-    None yoki manfiy son barcha elementlarni olishni anglatadi.
+    None or a negative number means selecting all elements.
     """
     if value is None or value < 0:
         return None
@@ -54,18 +54,18 @@ def format_duration(seconds: float) -> str:
     minutes, seconds = divmod(remainder, 60)
 
     if hours:
-        return f"{hours} soat {minutes} daqiqa {seconds} soniya"
+        return f"{hours} hours {minutes} minutes {seconds} seconds"
 
     if minutes:
-        return f"{minutes} daqiqa {seconds} soniya"
+        return f"{minutes} minutes {seconds} seconds"
 
-    return f"{seconds} soniya"
+    return f"{seconds} seconds"
 
 
 def get_class_directories(split_directory: Path) -> list[Path]:
     if not split_directory.exists():
         raise FileNotFoundError(
-            f"Split papkasi topilmadi: {split_directory}"
+            f"Split directory not found: {split_directory}"
         )
 
     return sorted(
@@ -94,7 +94,7 @@ def choose_classes(
     random_generator: random.Random,
 ) -> list[str]:
     """
-    Barcha splitlarda mavjud bo'lgan umumiy classlarni tanlaydi.
+    Selects classes that are common to all splits.
     """
     class_sets: list[set[str]] = []
 
@@ -109,13 +109,13 @@ def choose_classes(
         class_sets.append(class_names)
 
     if not class_sets:
-        raise ValueError("Splitlar berilmagan.")
+        raise ValueError("No splits were provided.")
 
     common_classes = set.intersection(*class_sets)
 
     if not common_classes:
         raise ValueError(
-            "Train, val va test orasida umumiy class topilmadi."
+            "No common classes were found across train, val, and test."
         )
 
     classes = sorted(common_classes)
@@ -126,8 +126,8 @@ def choose_classes(
     if class_cnt is not None:
         if class_cnt > len(classes):
             raise ValueError(
-                f"class_cnt={class_cnt}, lekin umumiy classlar soni "
-                f"{len(classes)}."
+                f"class_cnt={class_cnt}, but there are only "
+                f"{len(classes)} common classes."
             )
 
         classes = classes[:class_cnt]
@@ -155,8 +155,8 @@ def choose_split_videos(
             if videos_per_class > len(video_files):
                 raise ValueError(
                     f"Split='{split}', class='{gloss}': "
-                    f"{videos_per_class} ta video so'ralgan, "
-                    f"lekin {len(video_files)} ta mavjud."
+                    f"{videos_per_class} videos were requested, "
+                    f"but only {len(video_files)} are available."
                 )
 
             video_files = video_files[:videos_per_class]
@@ -190,15 +190,15 @@ def extract_video_frames(
     resize_height: Optional[int] = None,
 ) -> int:
     """
-    Bitta videoni JPEG freymlarga ajratadi.
+    Extracts a single video into JPEG frames.
 
     frame_step:
-        Har nechanchi freym saqlanishi.
-        Masalan, 1 = barcha freymlar, 2 = har ikkinchi freym.
+        Save every N-th frame.
+        For example, 1 = all frames, 2 = every second frame.
 
     target_fps:
-        Belgilansa, video shu FPS bo'yicha sample qilinadi.
-        target_fps va frame_step birgalikda ishlatilmaydi.
+        If specified, the video is sampled according to this FPS.
+        target_fps and frame_step are not used together.
     """
     remove_existing_directory(output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -207,7 +207,7 @@ def extract_video_frames(
 
     if not capture.isOpened():
         remove_existing_directory(output_directory)
-        raise RuntimeError(f"Videoni ochib bo'lmadi: {video_path}")
+        raise RuntimeError(f"Could not open video: {video_path}")
 
     original_fps = capture.get(cv2.CAP_PROP_FPS)
 
@@ -218,7 +218,7 @@ def extract_video_frames(
         if target_fps <= 0:
             capture.release()
             remove_existing_directory(output_directory)
-            raise ValueError("target_fps musbat bo'lishi kerak.")
+            raise ValueError("target_fps must be positive.")
 
         if target_fps > original_fps:
             effective_step = 1
@@ -265,7 +265,7 @@ def extract_video_frames(
 
             if not write_success:
                 raise RuntimeError(
-                    f"Freymni yozib bo'lmadi: {frame_path}"
+                    f"Could not write frame: {frame_path}"
                 )
 
             saved_frame_index += 1
@@ -283,7 +283,7 @@ def extract_video_frames(
     if saved_count == 0:
         remove_existing_directory(output_directory)
         raise RuntimeError(
-            f"Videodan freym olinmadi: {video_path}"
+            f"No frames were extracted from video: {video_path}"
         )
 
     return saved_count
@@ -295,8 +295,8 @@ def resize_frame(
     target_height: Optional[int],
 ):
     """
-    Width yoki heightdan faqat bittasi berilsa aspect ratio saqlanadi.
-    Ikkalasi berilsa aniq o'lchamga resize qilinadi.
+    If only width or height is provided, the aspect ratio is preserved.
+    If both are provided, the frame is resized to the exact dimensions.
     """
     original_height, original_width = frame.shape[:2]
 
@@ -343,7 +343,7 @@ def process_split(
 
     progress_bar = tqdm(
         samples,
-        desc=f"{split} freymlar",
+        desc=f"{split} frames",
         unit="video",
         dynamic_ncols=True,
     )
@@ -384,16 +384,16 @@ def process_split(
                 raise
 
             tqdm.write(
-                f"[XATO] {sample.video_path}: {error}"
+                f"[ERROR] {sample.video_path}: {error}"
             )
 
     elapsed = time.perf_counter() - split_started_at
 
     print(
-        f"[{split.upper()}] Tugadi: "
-        f"{processed_videos} ta video, "
-        f"{total_frames} ta JPEG freym, "
-        f"{len(failed_videos)} ta xato, "
+        f"[{split.upper()}] Completed: "
+        f"{processed_videos} videos, "
+        f"{total_frames} JPEG frames, "
+        f"{len(failed_videos)} errors, "
         f"{format_duration(elapsed)}"
     )
 
@@ -406,7 +406,7 @@ def process_split(
                     f"{video_path}\t{error_message}\n"
                 )
 
-        print(f"Xatolar logi: {error_log_path}")
+        print(f"Error log: {error_log_path}")
 
     return processed_videos, total_frames
 
@@ -427,41 +427,41 @@ def convert_videos_to_frames(
     skip_errors: bool = False,
 ) -> None:
     """
-    Train, test va val videolarni JPEG freymlarga ajratadi.
+    Extracts train, test, and val videos into JPEG frames.
 
-    Eski output_root to'liq o'chiriladi va qaytadan yaratiladi.
+    The existing output_root is completely removed and recreated.
     """
     dataset_root = Path(dataset_root).expanduser().resolve()
     output_root = Path(output_root).expanduser().resolve()
 
     if not dataset_root.exists():
         raise FileNotFoundError(
-            f"Dataset topilmadi: {dataset_root}"
+            f"Dataset not found: {dataset_root}"
         )
 
     if dataset_root == output_root:
         raise ValueError(
-            "dataset_root va output_root bir xil bo'lishi mumkin emas."
+            "dataset_root and output_root cannot be the same."
         )
 
     if frame_step <= 0:
-        raise ValueError("frame_step musbat bo'lishi kerak.")
+        raise ValueError("frame_step must be positive.")
 
     if not 1 <= jpeg_quality <= 100:
         raise ValueError(
-            "jpeg_quality 1 va 100 orasida bo'lishi kerak."
+            "jpeg_quality must be between 1 and 100."
         )
 
     if resize_width is not None and resize_width <= 0:
-        raise ValueError("resize_width musbat bo'lishi kerak.")
+        raise ValueError("resize_width must be positive.")
 
     if resize_height is not None and resize_height <= 0:
-        raise ValueError("resize_height musbat bo'lishi kerak.")
+        raise ValueError("resize_height must be positive.")
 
     if target_fps is not None and target_fps <= 0:
-        raise ValueError("target_fps musbat bo'lishi kerak.")
+        raise ValueError("target_fps must be positive.")
 
-    print(f"Eski output o'chirilmoqda: {output_root}")
+    print(f"Removing existing output: {output_root}")
     remove_existing_directory(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -482,7 +482,7 @@ def convert_videos_to_frames(
     )
 
     print(f"Random seed: {random_seed}")
-    print(f"Tanlangan classlar: {len(selected_classes)}")
+    print(f"Selected classes: {len(selected_classes)}")
 
     # for class_name in selected_classes:
     #     print(f"  - {class_name}")
@@ -523,11 +523,11 @@ def convert_videos_to_frames(
 
     print()
     print(
-        f"Barcha splitlar tayyor: "
-        f"{total_videos} ta video, "
-        f"{total_frames} ta JPEG freym."
+        f"All splits completed: "
+        f"{total_videos} videos, "
+        f"{total_frames} JPEG frames."
     )
-    print(f"Umumiy vaqt: {format_duration(total_elapsed)}")
+    print(f"Total time: {format_duration(total_elapsed)}")
 
 
 def smoke_test(
@@ -535,9 +535,9 @@ def smoke_test(
     output_root: str | Path,
 ) -> None:
     """
-    1 ta class va har bir splitdan 1 ta video bilan test.
+    Test using 1 class and 1 video from each split.
     """
-    print("Smoke test boshlandi.")
+    print("Smoke test started.")
 
     convert_videos_to_frames(
         dataset_root=dataset_root,
@@ -570,8 +570,8 @@ def parse_optional_count(value: str) -> Optional[int]:
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Video datasetni CoCLR uchun JPEG freym "
-            "papkalariga ajratish."
+            "Convert a video dataset into JPEG frame "
+            "directories for CoCLR."
         )
     )
 
@@ -579,37 +579,37 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--dataset-root",
         type=Path,
         required=True,
-        help="Asl train/test/val video dataset manzili.",
+        help="Path to the original train/test/val video dataset.",
     )
     parser.add_argument(
         "--output-root",
         type=Path,
         required=True,
-        help="JPEG freymlar yoziladigan manzil.",
+        help="Directory where JPEG frames will be written.",
     )
     parser.add_argument(
         "--class-cnt",
         type=parse_optional_count,
         default=None,
-        help="Classlar soni. Default: all.",
+        help="Number of classes. Default: all.",
     )
     parser.add_argument(
         "--train-cnt",
         type=parse_optional_count,
         default=None,
-        help="Har bir classdan train video soni. Default: all.",
+        help="Number of train videos per class. Default: all.",
     )
     parser.add_argument(
         "--test-cnt",
         type=parse_optional_count,
         default=None,
-        help="Har bir classdan test video soni. Default: all.",
+        help="Number of test videos per class. Default: all.",
     )
     parser.add_argument(
         "--val-cnt",
         type=parse_optional_count,
         default=None,
-        help="Har bir classdan val video soni. Default: all.",
+        help="Number of validation videos per class. Default: all.",
     )
     parser.add_argument(
         "--random-seed",
@@ -622,8 +622,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help=(
-            "Har nechanchi freym saqlanishi. "
-            "1 = barcha freymlar."
+            "Save every N-th frame. "
+            "1 = save all frames."
         ),
     )
     parser.add_argument(
@@ -631,37 +631,37 @@ def build_argument_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help=(
-            "Videodan olinadigan taxminiy FPS. "
-            "Berilmasa frame-step ishlatiladi."
+            "Approximate FPS to sample from the video. "
+            "If omitted, frame-step is used."
         ),
     )
     parser.add_argument(
         "--jpeg-quality",
         type=int,
         default=95,
-        help="JPEG sifati: 1-100. Default: 95.",
+        help="JPEG quality: 1-100. Default: 95.",
     )
     parser.add_argument(
         "--resize-width",
         type=int,
         default=None,
-        help="Freymlarning yangi eni.",
+        help="New frame width.",
     )
     parser.add_argument(
         "--resize-height",
         type=int,
         default=None,
-        help="Freymlarning yangi bo'yi.",
+        help="New frame height.",
     )
     parser.add_argument(
         "--skip-errors",
         action="store_true",
-        help="Xato videolarni tashlab davom etish.",
+        help="Skip videos that produce errors and continue processing.",
     )
     parser.add_argument(
         "--smoke-test",
         action="store_true",
-        help="1 class va har bir splitdan 1 video bilan test.",
+        help="Test with 1 class and 1 video from each split.",
     )
 
     return parser

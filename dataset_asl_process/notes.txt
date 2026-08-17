@@ -1,0 +1,85 @@
+# smoke test examples and steps
+
+python make_splits.py --dataset-root ./data/raw/ASL_Citizen --output-root ./data/outputs/splits --class-cnt 5 --train-cnt 10 --test-cnt 5 --val-cnt 5 --symlink --allow-fewer
+
+
+python make_frames.py --dataset-root ./data/outputs/splits --output-root ./data/outputs/frames
+
+
+python make_lmdbs.py --dataset-root ./data/outputs/frames --output-root ./data/outputs/lmdbs
+
+
+python make_flow_lmdbs.py --train-root ./data/outputs/splits/train --output-lmdb ./data/outputs/lmdbs/train_flow.lmdb
+
+
+CUDA_VISIBLE_DEVICES=0 \
+python -m torch.distributed.run \
+    --standalone \
+    --nproc-per-node=1 \
+    main_nce.py \
+    --dataset custom-asl-flow-2clip \
+    --lmdb-path ../../data/outputs/lmdbs/train_flow.lmdb \
+    --model infonce \
+    --net s3d \
+    --seq_len 32 \
+    --num_seq 2 \
+    --ds 1 \
+    --batch_size 2 \
+    --workers 4 \
+    --moco-k 2048 \
+    --epochs 200 \
+    --schedule 160 190 \
+    --save_freq 10 \
+    --print_freq 10 \
+    --name_prefix ASL_FLOW_
+
+
+
+CUDA_VISIBLE_DEVICES=0 \
+python -m torch.distributed.run \
+    --standalone \
+    --nproc-per-node=1 \
+    main_nce.py \
+    --dataset custom-asl-2clip \
+    --lmdb-path ../../data/outputs/lmdbs/train.lmdb \
+    --model infonce \
+    --net s3d \
+    --seq_len 32 \
+    --num_seq 2 \
+    --ds 1 \
+    --batch_size 2 \
+    --workers 4 \
+    --moco-k 2048 \
+    --epochs 200 \
+    --schedule 160 190 \
+    --save_freq 10 \
+    --print_freq 10 \
+    --name_prefix ASL_RGB_
+
+
+
+CUDA_VISIBLE_DEVICES=0 \
+python -m torch.distributed.run \
+    --standalone \
+    --nproc-per-node=1 \
+    main_coclr.py \
+    --dataset custom-asl-2stream-2clip \
+    --rgb-lmdb-path ../../data/outputs/lmdbs/train.lmdb \
+    --flow-lmdb-path ../../data/outputs/lmdbs/train_flow.lmdb \
+    --model coclr \
+    --net s3d \
+    --pretrain \
+        ./log-pretrain/ASL_RGB_infonce_k2048_custom-asl-2clip-128_s3d_bs2_lr0.001_seq2_len32_ds1/model/epoch199.pth.tar \
+        ./log-pretrain/ASL_FLOW_infonce_k2048_custom-asl-flow-2clip-128_s3d_bs2_lr0.001_seq2_len32_ds1/model/epoch199.pth.tar \
+    --seq_len 32 \
+    --num_seq 2 \
+    --ds 1 \
+    --batch_size 1 \
+    --workers 0 \
+    --topk 5 \
+    --moco-k 2048 \
+    --epochs 100 \
+    --schedule 60 80 \
+    --save_freq 5 \
+    --print_freq 10 \
+    --name_prefix ASL_COCLR_
