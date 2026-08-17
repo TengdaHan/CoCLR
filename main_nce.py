@@ -77,7 +77,7 @@ def parse_args():
                              'fastest way to use PyTorch for either single node or '
                              'multi node data parallel training')
     # for torch.distributed.launch
-    parser.add_argument('--local_rank', default=-1, type=int,
+    parser.add_argument('--local_rank', "--local_rank", default=-1, type=int,
                         help='node rank for distributed training')
 
     # moco specific configs:
@@ -89,6 +89,12 @@ def parse_args():
                         help='moco momentum of updating key encoder (default: 0.999)')
     parser.add_argument('--moco-t', default=0.07, type=float,
                         help='softmax temperature (default: 0.07)')
+    parser.add_argument(
+        "--lmdb-path",
+        default="",
+        type=str,
+        help="Path to the custom RGB LMDB dataset.",
+    )
     args = parser.parse_args()
     return args
 
@@ -98,13 +104,22 @@ def main(args):
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    if args.dist_url == "env://" and args.world_size == -1:
+    # Support modern torchrun environment variables.
+    if "WORLD_SIZE" in os.environ:
         args.world_size = int(os.environ["WORLD_SIZE"])
 
-    if args.local_rank != -1:
-        args.world_size = int(os.environ["WORLD_SIZE"])
+    if "RANK" in os.environ:
+        args.rank = int(os.environ["RANK"])
 
-    args.distributed = args.world_size > 1 or args.multiprocessing_distributed
+    if "LOCAL_RANK" in os.environ:
+        args.local_rank = int(os.environ["LOCAL_RANK"])
+
+    # DDP must remain enabled even with one process / one GPU.
+    args.distributed = (
+        "LOCAL_RANK" in os.environ
+        or args.world_size > 1
+        or args.multiprocessing_distributed
+    )
 
     ngpus_per_node = torch.cuda.device_count()
 
@@ -127,7 +142,13 @@ def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
 
     if args.distributed:
-        if args.local_rank != -1: # torch.distributed.launch
+        if "LOCAL_RANK" in os.environ:
+            args.local_rank = int(os.environ["LOCAL_RANK"])
+            args.rank = int(os.environ.get("RANK", 0))
+            args.world_size = int(os.environ.get("WORLD_SIZE", 1))
+            args.gpu = args.local_rank
+
+        elif args.local_rank != -1: # torch.distributed.launch
             args.rank = args.local_rank
             args.gpu = args.local_rank
         elif 'SLURM_PROCID' in os.environ: # slurm scheduler
@@ -305,6 +326,12 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
     end = time.time()
 
     for idx, (input_seq, label) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
+        # -------------- temprary begin --------------
+        if idx == 0:
+            print("input_seq shape:", input_seq.shape)
+            print("label shape:", label.shape)
+        # -------------- temprary end --------------
+
         data_time.update(time.time() - end)
         B = input_seq.size(0)
         input_seq = tr(input_seq.cuda(non_blocking=True))
@@ -313,6 +340,12 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
             output, target = model(input_seq)
             loss = criterion(output, target)
             top1, top5 = calc_topk_accuracy(output, target, (1,5))
+
+            # ------------------ temprary begin --------------
+            print("output:", output.shape)
+            print("target:", target.shape)
+            print("loss:", loss.item())
+            # ------------------ temprary end --------------
         
         if args.model == 'ubernce': # 'target' is the binary mask
             label = label.cuda(non_blocking=True)
@@ -407,6 +440,37 @@ def get_data(transform, mode, args):
     elif args.dataset == 'k400-f-2clip': 
         dataset = K400_Flow_LMDB_2CLIP(mode=mode, transform=transform, 
             num_frames=args.seq_len, ds=args.ds, return_label=True)
+
+    elif args.dataset == "custom-asl-2clip":
+        if not args.lmdb_path:
+            raise ValueError(
+                "--lmdb-path is required when "
+                "--dataset custom-asl-2clip is used."
+            )
+
+        dataset = CustomASLLMDB_2CLIP(
+            db_path=args.lmdb_path,
+            mode=mode,
+            transform=transform,
+            num_frames=args.seq_len,
+            ds=args.ds,
+            return_label=True,
+        )
+
+    elif args.dataset == "custom-asl-flow-2clip":
+        dataset = CustomASLFlowLMDB_2CLIP(
+            db_path=args.lmdb_path,
+            mode=mode,
+            transform=transform,
+            num_frames=args.seq_len,
+            ds=args.ds,
+            return_label=True,
+        )
+
+    else:
+        raise ValueError(
+            f"Unsupported dataset: {args.dataset}"
+        )
 
     return dataset 
 

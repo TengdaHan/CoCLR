@@ -77,7 +77,7 @@ def parse_args():
                              'fastest way to use PyTorch for either single node or '
                              'multi node data parallel training')
     # for torch.distributed.launch
-    parser.add_argument('--local_rank', default=-1, type=int,
+    parser.add_argument("--local-rank",'--local_rank', default=-1, type=int,
                         help='node rank for distributed training')
 
     # moco specific configs:
@@ -91,6 +91,18 @@ def parse_args():
                         help='softmax temperature (default: 0.07)')
     parser.add_argument('--cos', action='store_true', 
                         help='use cosine lr schedule')
+    parser.add_argument(
+        "--rgb-lmdb-path",
+        type=str,
+        default="",
+        help="Path to the custom ASL RGB LMDB.",
+    )
+    parser.add_argument(
+        "--flow-lmdb-path",
+        type=str,
+        default="",
+        help="Path to the custom ASL optical-flow LMDB.",
+    )
     args = parser.parse_args()
     return args
 
@@ -100,13 +112,21 @@ def main(args):
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    if args.dist_url == "env://" and args.world_size == -1:
+    if "WORLD_SIZE" in os.environ:
         args.world_size = int(os.environ["WORLD_SIZE"])
 
-    if args.local_rank != -1:
-        args.world_size = int(os.environ["WORLD_SIZE"])
+    if "RANK" in os.environ:
+        args.rank = int(os.environ["RANK"])
 
-    args.distributed = args.world_size > 1 or args.multiprocessing_distributed
+    if "LOCAL_RANK" in os.environ:
+        args.local_rank = int(os.environ["LOCAL_RANK"])
+
+    # Enable DDP even for one process launched by torchrun.
+    args.distributed = (
+        "LOCAL_RANK" in os.environ
+        or args.world_size > 1
+        or args.multiprocessing_distributed
+    )
 
     ngpus_per_node = torch.cuda.device_count()
 
@@ -129,7 +149,13 @@ def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
 
     if args.distributed:
-        if args.local_rank != -1:
+        if "LOCAL_RANK" in os.environ:
+            args.local_rank = int(os.environ["LOCAL_RANK"])
+            args.rank = int(os.environ.get("RANK", 0))
+            args.world_size = int(os.environ.get("WORLD_SIZE", 1))
+            args.gpu = args.local_rank
+
+        elif args.local_rank != -1:
             args.rank = args.local_rank
             args.gpu = args.local_rank
         elif 'SLURM_PROCID' in os.environ: # slurm scheduler
@@ -370,6 +396,12 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
     end = time.time()
 
     for idx, (input_seq, vname, _) in enumerate(data_loader):
+        # -------------- temprary begin --------------
+        if idx == 0:
+            print("stream 0:", input_seq[0].shape)
+            print("stream 1:", input_seq[1].shape)
+            print("vname:", vname.shape)
+        # -------------- temprary end --------------
         data_time.update(time.time() - end)
         B = input_seq[0].size(0)
 
@@ -378,6 +410,12 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
 
         output, mask = model(*input_seq, vname)
         mask_sum = mask.sum(1)
+
+        # ------------------ temprary begin --------------
+        if idx == 0:
+            print("output:", output.shape)
+            print("mask:", mask.shape)
+        # ------------------ temprary end --------------
 
         if random.random() < 0.9:
             # because model has been pretrained with infoNCE, 
@@ -404,6 +442,11 @@ def train_one_epoch(data_loader, model, criterion, optimizer, transforms_cuda, e
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+        # ------------------ temprary begin --------------
+        print("queue_is_full:", model.module.queue_is_full)
+        # ------------------ temprary end --------------
+
         
         del loss 
         torch.cuda.empty_cache()
@@ -487,6 +530,30 @@ def get_data(transform, mode, args):
         dataset = K400_2STREAM_LMDB_2CLIP(mode=mode, transform=transform, 
             num_frames=args.seq_len, ds=args.ds, 
             return_label=True, return_source=True)
+
+    elif args.dataset == "custom-asl-2stream-2clip":
+        if not args.rgb_lmdb_path:
+            raise ValueError(
+                "--rgb-lmdb-path is required for "
+                "custom-asl-2stream-2clip."
+            )
+
+        if not args.flow_lmdb_path:
+            raise ValueError(
+                "--flow-lmdb-path is required for "
+                "custom-asl-2stream-2clip."
+            )
+
+        dataset = CustomASL_2STREAM_LMDB_2CLIP(
+            db_path_rgb=args.rgb_lmdb_path,
+            db_path_flow=args.flow_lmdb_path,
+            mode=mode,
+            transform=transform,
+            num_frames=args.seq_len,
+            ds=args.ds,
+            return_label=True,
+            return_source=True,
+        )
 
     else: 
         raise NotImplementedError
